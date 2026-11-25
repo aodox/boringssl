@@ -5672,6 +5672,34 @@ OPENSSL_EXPORT void SSL_set_retain_only_sha256_of_client_certs(SSL *ssl,
 OPENSSL_EXPORT void SSL_CTX_set_retain_only_sha256_of_client_certs(SSL_CTX *ctx,
                                                                    int enable);
 
+// SSL_client_hello_session_id_cb replaces the TLS 1.3 compatibility session id.
+//
+// BoringSSL calls it after the ClientHello handshake message is assembled and
+// before that message is hashed into the transcript or queued to send. The
+// 32-byte session id at offset 39 is still all zeros. `client_random`,
+// `x25519_private`, and `out_session_id` are each 32 bytes. `x25519_private`
+// is the standalone X25519 share when one was offered, otherwise the X25519
+// half of X25519MLKEM768.
+//
+// Return 1 and write the 32-byte session id the peer should see. Return 0 to
+// fail the handshake. A null callback leaves session id generation unchanged.
+// The callback runs only for a full TLS 1.3 ClientHello, not for resumption,
+// DTLS, or ECH. It must not call back into `ssl`.
+typedef int (*SSL_client_hello_session_id_cb)(
+    SSL *ssl, void *arg, const uint8_t *client_random,
+    const uint8_t *x25519_private, const uint8_t *client_hello,
+    size_t client_hello_len, uint8_t *out_session_id);
+
+// SSL_CTX_set_client_hello_session_id_callback sets the session id callback
+// for sockets created from `ctx` afterwards. `cb` may be null.
+OPENSSL_EXPORT void SSL_CTX_set_client_hello_session_id_callback(
+    SSL_CTX *ctx, SSL_client_hello_session_id_cb cb, void *arg);
+
+// SSL_set_client_hello_session_id_callback sets the session id callback on
+// `ssl`. `cb` may be null.
+OPENSSL_EXPORT void SSL_set_client_hello_session_id_callback(
+    SSL *ssl, SSL_client_hello_session_id_cb cb, void *arg);
+
 // SSL_CTX_set_grease_enabled configures whether sockets on `ctx` should enable
 // GREASE. See RFC 8701.
 // TODO(crbug.com/529360100): signature_algorithms extensions in

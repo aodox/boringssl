@@ -181,6 +181,62 @@ bool ssl_write_client_hello_without_extensions(const SSL_HANDSHAKE *hs,
   return true;
 }
 
+static bool ssl_client_x25519_private_for_session_id(const SSL_HANDSHAKE *hs,
+                                                     uint8_t out[32]) {
+  const SSLKeyShare *standalone = nullptr;
+  const SSLKeyShare *hybrid = nullptr;
+  for (const UniquePtr<SSLKeyShare> &share : hs->key_shares) {
+    if (share == nullptr) {
+      continue;
+    }
+    if (share->GroupID() == SSL_GROUP_X25519) {
+      standalone = share.get();
+    } else if (share->GroupID() == SSL_GROUP_X25519_MLKEM768) {
+      hybrid = share.get();
+    }
+  }
+  if (standalone != nullptr) {
+    return standalone->CopyX25519PrivateKey(out);
+  }
+  if (hybrid != nullptr) {
+    return hybrid->CopyX25519PrivateKey(out);
+  }
+  return false;
+}
+
+static bool ssl_seal_client_hello_session_id(SSL_HANDSHAKE *hs,
+                                             Array<uint8_t> *msg) {
+  SSL_client_hello_session_id_cb cb = hs->config->client_hello_session_id_cb;
+  if (cb == nullptr || msg->size() < 71 || (*msg)[0] != SSL3_MT_CLIENT_HELLO ||
+      (*msg)[38] != SSL3_SESSION_ID_SIZE) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+    return false;
+  }
+  uint8_t *session_id = msg->data() + 39;
+  for (size_t i = 0; i < SSL3_SESSION_ID_SIZE; i++) {
+    if (session_id[i] != 0) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return false;
+    }
+  }
+  uint8_t x25519_private[32];
+  if (!ssl_client_x25519_private_for_session_id(hs, x25519_private)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+    return false;
+  }
+  uint8_t sealed[SSL3_SESSION_ID_SIZE];
+  if (!cb(hs->ssl, hs->config->client_hello_session_id_cb_arg,
+          hs->ssl->s3->client_random, x25519_private, msg->data(), msg->size(),
+          sealed)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+    return false;
+  }
+  OPENSSL_memcpy(session_id, sealed, sizeof(sealed));
+  OPENSSL_memcpy(hs->session_id.data(), sealed, sizeof(sealed));
+  hs->seal_client_hello_session_id = false;
+  return true;
+}
+
 bool ssl_add_client_hello(SSL_HANDSHAKE *hs) {
   SSLImpl *const ssl = hs->ssl;
   ScopedCBB cbb;
@@ -194,6 +250,11 @@ bool ssl_add_client_hello(SSL_HANDSHAKE *hs) {
                                                  /*empty_session_id=*/false) ||
       !ssl_add_clienthello_tlsext(hs, &body, /*out_encoded=*/nullptr, type) ||
       !ssl->method->finish_message(ssl, cbb.get(), &msg)) {
+    return false;
+  }
+
+  if (hs->seal_client_hello_session_id &&
+      !ssl_seal_client_hello_session_id(hs, &msg)) {
     return false;
   }
 
@@ -394,9 +455,23 @@ static enum ssl_hs_wait_t do_start_connect(SSL_HANDSHAKE *hs) {
              enable_compatibility_mode) {
     // TLS 1.2 session tickets require a placeholder value to signal resumption.
     hs->session_id.ResizeForOverwrite(SSL_MAX_SSL_SESSION_ID_LENGTH);
-    if (!RAND_bytes(hs->session_id.data(), hs->session_id.size())) {
+    const bool seal = enable_compatibility_mode &&
+                      session_type != SSLSessionType::kTicket &&
+                      ssl->config->client_hello_session_id_cb != nullptr;
+    if (seal) {
+      if (hs->selected_ech_config) {
+        OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+        return ssl_hs_error;
+      }
+      OPENSSL_memset(hs->session_id.data(), 0, hs->session_id.size());
+      hs->seal_client_hello_session_id = true;
+    } else if (!RAND_bytes(hs->session_id.data(), hs->session_id.size())) {
       return ssl_hs_error;
     }
+  } else if (ssl->config->client_hello_session_id_cb != nullptr) {
+    // The callback only applies to a TLS 1.3 compatibility session id.
+    OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+    return ssl_hs_error;
   }
 
   ssl_early_data_reason_t reason = should_offer_early_data(hs);

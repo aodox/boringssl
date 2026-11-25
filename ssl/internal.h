@@ -937,6 +937,10 @@ class SSLKeyShare {
   // successful and false otherwise. It should be called after `Generate`.
   virtual bool SerializePrivateKey(CBB *out) { return false; }
 
+  // CopyX25519PrivateKey writes the X25519 scalar used by this share.
+  // Hybrid groups copy only the X25519 half. The default returns false.
+  virtual bool CopyX25519PrivateKey(uint8_t out[32]) const { return false; }
+
   // DeserializePrivateKey initializes the state of the key exchange from `in`,
   // returning true if successful and false otherwise.
   virtual bool DeserializePrivateKey(CBS *in) { return false; }
@@ -2106,6 +2110,11 @@ struct SSL_HANDSHAKE {
 
   // session_id is the session ID in the ClientHello.
   InplaceVector<uint8_t, SSL_MAX_SSL_SESSION_ID_LENGTH> session_id;
+
+  // seal_client_hello_session_id is set when `session_id` is 32 zero bytes
+  // that the session-id callback must replace before the transcript hash.
+  // A later ClientHello on this handshake keeps the sealed value.
+  bool seal_client_hello_session_id = false;
 
   // grease_seed is the entropy for GREASE values.
   uint8_t grease_seed[ssl_grease_last_index + 1] = {0};
@@ -3433,6 +3442,11 @@ struct SSL_CONFIG {
 
   enum ssl_verify_result_t (*custom_verify_callback)(
       SSL *ssl, uint8_t *out_alert) = nullptr;
+
+  // Null keeps BoringSSL's own session id. See
+  // `SSL_set_client_hello_session_id_callback`.
+  SSL_client_hello_session_id_cb client_hello_session_id_cb = nullptr;
+  void *client_hello_session_id_cb_arg = nullptr;
   // Server-only: psk_identity_hint is the identity hint to send in
   // PSK-based key exchanges.
   UniquePtr<char> psk_identity_hint;
@@ -4150,6 +4164,10 @@ class SSLContext : public ssl_ctx_st, public RefCounted<SSLContext> {
   // compatibility.
   int (*legacy_ocsp_callback)(SSL *ssl, void *arg) = nullptr;
   void *legacy_ocsp_callback_arg = nullptr;
+
+  // Copied onto each new SSL. Null keeps the stock session id.
+  SSL_client_hello_session_id_cb client_hello_session_id_cb = nullptr;
+  void *client_hello_session_id_cb_arg = nullptr;
 
   // compliance_policy limits the set of ciphers that can be selected when
   // negotiating a TLS 1.3 connection.

@@ -508,6 +508,10 @@ SSL *SSL_new(SSL_CTX *ctx) {
   ssl->config->retain_only_sha256_of_client_certs =
       ctx_impl->retain_only_sha256_of_client_certs;
   ssl->config->permute_extensions = ctx_impl->permute_extensions;
+  ssl->config->client_hello_session_id_cb =
+      ctx_impl->client_hello_session_id_cb;
+  ssl->config->client_hello_session_id_cb_arg =
+      ctx_impl->client_hello_session_id_cb_arg;
   ssl->config->compliance_policy = ctx_impl->compliance_policy;
 
   if (!ssl->config->tls13_cipher_list.CopyFrom(ctx_impl->tls13_cipher_list)) {
@@ -3319,6 +3323,23 @@ void SSL_set_permute_extensions(SSL *ssl, int enabled) {
     return;
   }
   ssl_impl->config->permute_extensions = !!enabled;
+}
+
+void SSL_CTX_set_client_hello_session_id_callback(
+    SSL_CTX *ctx, SSL_client_hello_session_id_cb cb, void *arg) {
+  auto *ctx_impl = FromOpaque(ctx);
+  ctx_impl->client_hello_session_id_cb = cb;
+  ctx_impl->client_hello_session_id_cb_arg = arg;
+}
+
+void SSL_set_client_hello_session_id_callback(
+    SSL *ssl, SSL_client_hello_session_id_cb cb, void *arg) {
+  auto *ssl_impl = FromOpaque(ssl);
+  if (!ssl_impl->config) {
+    return;
+  }
+  ssl_impl->config->client_hello_session_id_cb = cb;
+  ssl_impl->config->client_hello_session_id_cb_arg = arg;
 }
 
 int32_t SSL_get_ticket_age_skew(const SSL *ssl) {
