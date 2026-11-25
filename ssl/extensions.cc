@@ -4333,6 +4333,7 @@ static_assert(kNumExtensions <=
 static bool ssl_setup_chrome_extension_order(SSL_HANDSHAKE *hs);
 
 bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
+  // The Chrome preset is a fixed order. It wins over permute_extensions.
   if (hs->config->client_hello_preset == SSL_CLIENT_HELLO_PRESET_CHROME) {
     return ssl_setup_chrome_extension_order(hs);
   }
@@ -4396,7 +4397,11 @@ static bool ssl_setup_chrome_extension_order(SSL_HANDSHAKE *hs) {
   size_t n = 0;
   for (uint16_t value : kOrder) {
     uint32_t index = 0;
-    if (tls_extension_find(&index, value) == nullptr || used[index]) {
+    if (tls_extension_find(&index, value) == nullptr) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return false;
+    }
+    if (used[index]) {
       continue;
     }
     permutation[n++] = static_cast<uint8_t>(index);
@@ -4408,6 +4413,7 @@ static bool ssl_setup_chrome_extension_order(SSL_HANDSHAKE *hs) {
     }
   }
   if (n != kNumExtensions) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
     return false;
   }
   hs->extension_permutation = std::move(permutation);

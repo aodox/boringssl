@@ -5718,7 +5718,8 @@ OPENSSL_EXPORT void SSL_set_permute_extensions(SSL *ssl, int enabled);
 // BoringSSL table. SSL_CLIENT_HELLO_PRESET_CHROME installs a fixed Chrome
 // order (uTLS HelloChrome_155, GREASE bookends still come from grease).
 // The preset is off unless SSL_set_client_hello_preset is called. It does not
-// change ciphers, groups, or the session-id callback.
+// change ciphers, groups, or the session-id callback. When the Chrome preset
+// is set, SSL_set_permute_extensions is ignored for that ClientHello.
 #define SSL_CLIENT_HELLO_PRESET_NONE 0
 #define SSL_CLIENT_HELLO_PRESET_CHROME 1
 
