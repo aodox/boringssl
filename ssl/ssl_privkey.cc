@@ -971,3 +971,14 @@ int SSL_set_verify_algorithm_prefs(SSL *ssl, const uint16_t *prefs,
   return set_sigalg_prefs(&ssl_impl->config->verify_sigalgs,
                           Span(prefs, num_prefs));
 }
+
+int SSL_set_client_hello_sigalgs(SSL *ssl, const uint16_t *sigalgs,
+                                 size_t num_sigalgs) {
+  auto *ssl_impl = FromOpaque(ssl);
+  if (!ssl_impl->config) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return 0;
+  }
+  return set_sigalg_prefs(&ssl_impl->config->client_hello_sigalgs,
+                          Span(sigalgs, num_sigalgs));
+}

@@ -3518,6 +3518,10 @@ struct SSL_CONFIG {
   // accepted from the peer in decreasing order of preference.
   Array<uint16_t> verify_sigalgs;
 
+  // client_hello_sigalgs, if not empty, is advertised in the ClientHello.
+  // Verification still uses verify_sigalgs.
+  Array<uint16_t> client_hello_sigalgs;
+
   // srtp_profiles is the list of configured SRTP protection profiles for
   // DTLS-SRTP.
   UniquePtr<STACK_OF(SRTP_PROTECTION_PROFILE)> srtp_profiles;
@@ -3597,12 +3601,6 @@ struct SSL_CONFIG {
   // server_padding_enabled is true iff the server is willing to send additional
   // padding to clients that request it through the server padding extension.
   bool server_padding_enabled : 1;
-
-  // client_hello_preset selects a ClientHello extension order.
-  // SSL_CLIENT_HELLO_PRESET_NONE keeps the stock table order.
-  // SSL_CLIENT_HELLO_PRESET_CHROME installs the Chrome profile order.
-  // Default is none, so ordinary TLS stays on the stock path.
-  uint8_t client_hello_preset = SSL_CLIENT_HELLO_PRESET_NONE;
 };
 
 // From RFC 8446, used in determining PSK modes.

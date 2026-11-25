@@ -3325,18 +3325,6 @@ void SSL_set_permute_extensions(SSL *ssl, int enabled) {
   ssl_impl->config->permute_extensions = !!enabled;
 }
 
-void SSL_set_client_hello_preset(SSL *ssl, int preset) {
-  auto *ssl_impl = FromOpaque(ssl);
-  if (!ssl_impl->config) {
-    return;
-  }
-  if (preset == SSL_CLIENT_HELLO_PRESET_CHROME) {
-    ssl_impl->config->client_hello_preset = SSL_CLIENT_HELLO_PRESET_CHROME;
-  } else {
-    ssl_impl->config->client_hello_preset = SSL_CLIENT_HELLO_PRESET_NONE;
-  }
-}
-
 void SSL_CTX_set_client_hello_session_id_callback(
     SSL_CTX *ctx, SSL_client_hello_session_id_cb cb, void *arg) {
   auto *ctx_impl = FromOpaque(ctx);

@@ -5714,18 +5714,13 @@ OPENSSL_EXPORT void SSL_CTX_set_permute_extensions(SSL_CTX *ctx, int enabled);
 // permute extensions. For now, this is only implemented for the ClientHello.
 OPENSSL_EXPORT void SSL_set_permute_extensions(SSL *ssl, int enabled);
 
-// SSL_CLIENT_HELLO_PRESET_NONE leaves ClientHello extension order at the stock
-// BoringSSL table. SSL_CLIENT_HELLO_PRESET_CHROME installs a fixed Chrome
-// order (uTLS HelloChrome_155, GREASE bookends still come from grease).
-// The preset is off unless SSL_set_client_hello_preset is called. It does not
-// change ciphers, groups, or the session-id callback. When the Chrome preset
-// is set, SSL_set_permute_extensions is ignored for that ClientHello.
-#define SSL_CLIENT_HELLO_PRESET_NONE 0
-#define SSL_CLIENT_HELLO_PRESET_CHROME 1
-
-// SSL_set_client_hello_preset selects the ClientHello extension order for
-// `ssl`. Call it before the handshake. Unknown values are treated as none.
-OPENSSL_EXPORT void SSL_set_client_hello_preset(SSL *ssl, int preset);
+// SSL_set_client_hello_sigalgs sets the signature_algorithms extension sent in
+// the ClientHello. It does not change which algorithms this connection accepts
+// when verifying a peer; that remains SSL_set_verify_algorithm_prefs. An empty
+// list clears the override and the ClientHello goes back to the verify list.
+// Returns one on success and zero on error. Call it before the handshake.
+OPENSSL_EXPORT int SSL_set_client_hello_sigalgs(SSL *ssl, const uint16_t *sigalgs,
+                                                size_t num_sigalgs);
 
 // SSL_max_seal_overhead returns the maximum overhead, in bytes, of sealing a
 // record with `ssl`.
