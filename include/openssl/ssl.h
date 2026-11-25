@@ -5714,6 +5714,18 @@ OPENSSL_EXPORT void SSL_CTX_set_permute_extensions(SSL_CTX *ctx, int enabled);
 // permute extensions. For now, this is only implemented for the ClientHello.
 OPENSSL_EXPORT void SSL_set_permute_extensions(SSL *ssl, int enabled);
 
+// SSL_CLIENT_HELLO_PRESET_NONE leaves ClientHello extension order at the stock
+// BoringSSL table. SSL_CLIENT_HELLO_PRESET_CHROME installs a fixed Chrome
+// order (uTLS HelloChrome_155, GREASE bookends still come from grease).
+// The preset is off unless SSL_set_client_hello_preset is called. It does not
+// change ciphers, groups, or the session-id callback.
+#define SSL_CLIENT_HELLO_PRESET_NONE 0
+#define SSL_CLIENT_HELLO_PRESET_CHROME 1
+
+// SSL_set_client_hello_preset selects the ClientHello extension order for
+// `ssl`. Call it before the handshake. Unknown values are treated as none.
+OPENSSL_EXPORT void SSL_set_client_hello_preset(SSL *ssl, int preset);
+
 // SSL_max_seal_overhead returns the maximum overhead, in bytes, of sealing a
 // record with `ssl`.
 OPENSSL_EXPORT size_t SSL_max_seal_overhead(const SSL *ssl);

@@ -4330,7 +4330,12 @@ static_assert(kNumExtensions <=
                   sizeof(((SSL_HANDSHAKE *)nullptr)->extensions.received) * 8,
               "too many extensions for received bitset");
 
+static bool ssl_setup_chrome_extension_order(SSL_HANDSHAKE *hs);
+
 bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
+  if (hs->config->client_hello_preset == SSL_CLIENT_HELLO_PRESET_CHROME) {
+    return ssl_setup_chrome_extension_order(hs);
+  }
   if (!hs->config->permute_extensions) {
     return true;
   }
@@ -4349,6 +4354,61 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
   for (size_t i = kNumExtensions - 1; i > 0; i--) {
     // Set element `i` to a randomly-selected element 0 <= j <= i.
     std::swap(permutation[i], permutation[seeds[i - 1] % (i + 1)]);
+  }
+  hs->extension_permutation = std::move(permutation);
+  return true;
+}
+
+static const struct tls_extension *tls_extension_find(uint32_t *out_index,
+                                                      uint16_t value);
+
+// Chrome 155 ClientHello extension order from uTLS HelloChrome_155.
+// GREASE at both ends is inserted by grease_enabled, not by this table.
+// uTLS also shuffles the middle; this profile keeps one stable order so a
+// caller can assert it. Shuffle is a later switch.
+static bool ssl_setup_chrome_extension_order(SSL_HANDSHAKE *hs) {
+  static const uint16_t kOrder[] = {
+      TLSEXT_TYPE_server_name,
+      TLSEXT_TYPE_extended_master_secret,
+      TLSEXT_TYPE_renegotiate,
+      TLSEXT_TYPE_supported_groups,
+      TLSEXT_TYPE_ec_point_formats,
+      TLSEXT_TYPE_session_ticket,
+      TLSEXT_TYPE_application_layer_protocol_negotiation,
+      TLSEXT_TYPE_status_request,
+      TLSEXT_TYPE_signature_algorithms,
+      TLSEXT_TYPE_certificate_timestamp,
+      TLSEXT_TYPE_key_share,
+      TLSEXT_TYPE_psk_key_exchange_modes,
+      TLSEXT_TYPE_supported_versions,
+      TLSEXT_TYPE_cert_compression,
+      TLSEXT_TYPE_application_settings,
+      TLSEXT_TYPE_trust_anchors,
+      TLSEXT_TYPE_encrypted_client_hello,
+  };
+  static_assert(kNumExtensions <= UINT8_MAX,
+                "extensions_permutation type is too small");
+  Array<uint8_t> permutation;
+  if (!permutation.InitForOverwrite(kNumExtensions)) {
+    return false;
+  }
+  bool used[kNumExtensions] = {};
+  size_t n = 0;
+  for (uint16_t value : kOrder) {
+    uint32_t index = 0;
+    if (tls_extension_find(&index, value) == nullptr || used[index]) {
+      continue;
+    }
+    permutation[n++] = static_cast<uint8_t>(index);
+    used[index] = true;
+  }
+  for (size_t i = 0; i < kNumExtensions; i++) {
+    if (!used[i]) {
+      permutation[n++] = static_cast<uint8_t>(i);
+    }
+  }
+  if (n != kNumExtensions) {
+    return false;
   }
   hs->extension_permutation = std::move(permutation);
   return true;

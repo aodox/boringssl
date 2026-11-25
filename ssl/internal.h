@@ -3597,6 +3597,12 @@ struct SSL_CONFIG {
   // server_padding_enabled is true iff the server is willing to send additional
   // padding to clients that request it through the server padding extension.
   bool server_padding_enabled : 1;
+
+  // client_hello_preset selects a ClientHello extension order.
+  // SSL_CLIENT_HELLO_PRESET_NONE keeps the stock table order.
+  // SSL_CLIENT_HELLO_PRESET_CHROME installs the Chrome profile order.
+  // Default is none, so ordinary TLS stays on the stock path.
+  uint8_t client_hello_preset = SSL_CLIENT_HELLO_PRESET_NONE;
 };
 
 // From RFC 8446, used in determining PSK modes.
